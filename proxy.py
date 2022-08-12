@@ -16,6 +16,7 @@ from bottle import Bottle, ServerAdapter, request, redirect
 dest_hostname = 'localhost'
 dest_port = 80
 password = None
+local_port = 8080
 
 # Ideas from https://stackoverflow.com/questions/11282218/bottle-web-framework-how-to-stop
 class LoginServer(ServerAdapter):
@@ -41,7 +42,7 @@ def login():
         </form>
     '''
 
-login_server = LoginServer(port=8080)
+login_server = LoginServer(port=local_port)
 signal_to_stop = Lock()
 
 @app.route('/', method='POST')
@@ -82,7 +83,7 @@ class ProxyHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self, body=True):
         sent = False
         try:
-            url = 'https://{}{}'.format(dest_hostname, self.path)
+            url = 'http://{}:{}{}'.format(dest_hostname, dest_port, self.path)
             req_header = self.parse_headers()
 
             #print(req_header)
@@ -103,7 +104,7 @@ class ProxyHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self, body=True):
         sent = False
         try:
-            url = 'https://{}{}'.format(dest_hostname, self.path)
+            url = 'http://{}:{}{}'.format(dest_hostname, dest_port, self.path)
             content_len = int(self.headers.getheader('content-length', 0))
             post_body = self.rfile.read(content_len)
             req_header = self.parse_headers()
@@ -152,22 +153,22 @@ def parse_args(argv=sys.argv[1:]):
     return args
 
 def main(argv=sys.argv[1:]):
-    global dest_hostname, dest_port, password, signal_to_stop, login_server
+    global dest_hostname, dest_port, local_port, password, signal_to_stop, login_server
     args = parse_args(argv)
     dest_hostname = args.dest_hostname
     dest_port = args.dest_port
+    local_port = args.local_port
     if args.password != None:
         password = args.password
         signal_to_stop.acquire()
         Thread(target=login_begin).start()
         signal_to_stop.acquire()
         login_server.stop()
-    print('http server is starting on port {} for {}:{}...'.format(args.local_port, args.dest_hostname, args.dest_port))
-    server_address = ('127.0.0.1', args.local_port)
+    print('http server is starting on port {} for {}:{}...'.format(local_port, dest_hostname, dest_port))
+    server_address = ('0.0.0.0', local_port)
     httpd = ThreadingHTTPServer(server_address, ProxyHTTPRequestHandler)
     print('http server is running as reverse proxy')
     httpd.serve_forever()
-    print('hello')
 
 if __name__ == '__main__':
     main()
